@@ -146,6 +146,63 @@ class TestFlaskr:
 
 
 
+    def test_unauthorized_remove_entry(self):
+        """
+        Test that unauthorized users cannot remove entries.
+        
+        This test verifies that:
+        1. A user who is not logged in cannot remove entries
+        2. The application returns a 401 Unauthorized status code
+        """
+        with app.test_client() as client:
+            # Try to remove an entry without logging in
+            response = client.post('/remove', data={
+                'id': 1  # Any ID will do for this test
+            })
+            assert response.status_code == 401  # Unauthorized
+
+
+    def test_add_and_remove_entry(self):
+        """
+        Test adding and removing an entry.
+        
+        This test verifies that:
+        1. A user can add an entry when logged in
+        2. The entry appears in the entries list
+        3. A user can remove the entry when logged in
+        4. The entry is no longer in the entries list
+        """
+        with app.test_client() as client:
+            # Log in
+            auth = AuthActions(client)
+            auth.login()
+            
+            # Add an entry
+            response = client.post('/add', data={
+                'title': 'Test Title',
+                'text': 'Test Text'
+            }, follow_redirects=True)
+            assert response.status_code == 200
+            assert b'New entry was successfully posted' in response.data
+            assert b'Test Title' in response.data
+            assert b'Test Text' in response.data
+            
+            # Get the entry ID (we need to query the database directly)
+            with app.app_context():
+                db = get_db()
+                entry = db.execute('SELECT id FROM entries WHERE title = ?', ['Test Title']).fetchone()
+                entry_id = entry['id']
+            
+            # Remove the entry
+            response = client.post('/remove', data={
+                'id': entry_id
+            }, follow_redirects=True)
+            assert response.status_code == 200
+            assert b'Entry was successfully removed' in response.data
+            assert b'Test Title' not in response.data
+            assert b'Test Text' not in response.data
+
+
 class AuthActions(object):
 
     def __init__(self, client):
